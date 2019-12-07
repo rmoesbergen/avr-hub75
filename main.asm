@@ -11,28 +11,37 @@
 
 
 .def TEMP = r16
+.def TEMP2 = r22
 .def RGB = r17   // PORT D PIN 2,3,4,5,6,7
 .def LINE = r18
 .def COUNTER = r19
-.def POSX = r1
-.def POSY = r2
+.def POSX = r20
+.def POSY = r21
 
-start:
-  call setupStack
-  call initialize
-  call drawFrame
-
-
-setupStack:
+  // Setup stack
   ldi TEMP, HIGH(RAMEND)
-  out SPH, R16
+  out SPH, TEMP
   ldi TEMP, LOW(RAMEND)
-  out SPL, R16
-  ret
+  out SPL, TEMP
 
-// Switch a
+  call initialize
+  call clearFramebuffer
+  // TODO: Set Pixels
+  
+  ldi RGB, 0b00111111
+  ldi POSY, 0
+  ldi POSX, 10
+lijntje:
+  call drawPixel
+  inc POSX
+  cpi POSX, 50
+  brne lijntje
+
+main_loop:
+  call drawFrame
+  rjmp main_loop
+
 initialize:
-  push TEMP
   ser TEMP
   out DDRD, TEMP
   out DDRC, TEMP
@@ -40,18 +49,18 @@ initialize:
   cbi PORTD, CLK
   cbi PORTC, LATCH
   cbi PORTB, OE
-  pop TEMP
-  call clearFramebuffer
   ret
 
 //  Clear framebuffer
 clearFramebuffer:
-  ldi ZH, high(frameBuffer + (64*32 - 1))
-  ldi ZL, low(frameBuffer + (64*32 - 1))
+  ldi ZH, high(frameBuffer)
+  ldi ZL, low(frameBuffer)
   clr TEMP
+  ldi XH, high(64*32-1)
+  ldi XL, low(64*32-1)
 loop:
-  st Z, TEMP
-  sbiw Z, 1
+  st Z+, TEMP
+  sbiw X, 1
   brne loop
   ret
 
@@ -105,6 +114,25 @@ next_pixel:
   // all done
   ret
 
+// Set a pixel in the framebuffer
+// X, Y, RGB
+drawPixel:
+  // FB_ADDR = POSY * 64 -> r1:r0
+  ldi TEMP, 64
+  mul POSY, TEMP
+  movw Z, r0
+  // FB_ADDR = FB_ADDR + POSX
+  add ZL, POSX
+  brcc no_overflow
+  inc ZH
+no_overflow:
+  // Add pixel offset to framebuffer base addres
+  ldi TEMP, low(frameBuffer)
+  ldi TEMP2, high(frameBuffer)
+  add ZL, TEMP
+  adc ZH, TEMP2
+  st Z, RGB
+  ret
 
 .dseg ; Start data segment 
 frameBuffer: .BYTE 64 * 32
